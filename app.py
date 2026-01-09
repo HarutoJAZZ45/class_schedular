@@ -1,12 +1,12 @@
 import streamlit as st
 import collections
+import pandas as pd
 
-# --- ロジック部分 (先ほどの関数と同じ) ---
+# --- ロジック部分 (変更なし) ---
 def combine_classes(class_durations):
     """
     90分授業を45分×2に分割し、できるだけ異なる教科同士を組み合わせるロジック
     """
-    # 1. コマを展開
     pool = []
     for subject, count in class_durations.items():
         pool.extend([subject] * (count * 2))
@@ -14,7 +14,6 @@ def combine_classes(class_durations):
     counts = collections.Counter(pool)
     pairs = []
     
-    # 2. ペア作成
     while sum(counts.values()) > 0:
         sorted_subjects = counts.most_common()
         
@@ -37,74 +36,136 @@ def combine_classes(class_durations):
     
     return pairs
 
+# --- スタイリング (CSS注入) ---
+def inject_custom_css():
+    st.markdown("""
+    <style>
+    /* メインコンテナの余白調整（スマホ向け） */
+    .block-container {
+        padding-top: 2rem;
+        padding-bottom: 2rem;
+    }
+    /* カード風デザイン */
+    .lesson-card {
+        background-color: #f0f2f6;
+        border-radius: 10px;
+        padding: 15px;
+        margin-bottom: 10px;
+        border-left: 5px solid #ff4b4b; /* アクセントカラー */
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .lesson-card.safe {
+        border-left: 5px solid #00c853; /* OKなときは緑 */
+        background-color: #e8f5e9;
+    }
+    .card-title {
+        font-weight: bold;
+        font-size: 1.1em;
+        margin-bottom: 0.5em;
+        display: flex;
+        align-items: center;
+        justify_content: space-between;
+    }
+    .card-badge {
+        background-color: #ffffff;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 0.8em;
+        color: #555;
+        border: 1px solid #ddd;
+    }
+    /* ボタンのスタイル */
+    .stButton>button {
+        width: 100%;
+        border-radius: 20px;
+        font-weight: bold;
+        height: 3em;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
 # --- Webアプリの画面部分 ---
 def main():
-    st.set_page_config(page_title="時間割組み合わせ作成", layout="centered")
-    
-    st.title("📚 時間割組み合わせ作成ツール")
-    st.write("各教科の90分授業のコマ数を入力すると、45分×2の最適な組み合わせを提案します。")
-    
-    st.divider()
+    st.set_page_config(page_title="時間割メーカー", page_icon="📅", layout="centered")
+    inject_custom_css() # CSSを適用
 
-    # 左サイドバーに入力フォームを配置
-    st.sidebar.header("コマ数入力 (90分単位)")
+    st.title("📅 時間割メーカー")
+    st.caption("スマホ対応・90分授業分割ツール")
     
-    subjects = ["国語", "算数", "英語", "理科", "社会"]
-    input_data = {}
-    
-    # 各教科の入力フォームを作成
-    for subject in subjects:
-        # number_input: 数値入力ボックス
-        input_data[subject] = st.sidebar.number_input(
-            f"{subject}のコマ数", 
-            min_value=0, 
-            max_value=20, 
-            value=1, 
-            step=1
-        )
-
-    # 計算実行ボタン
-    if st.sidebar.button("組み合わせを作成する"):
+    # --- サイドバー (入力) ---
+    with st.sidebar:
+        st.header("📝 設定")
+        st.write("各教科のコマ数(90分)を入力")
         
-        # 合計チェック
-        if sum(input_data.values()) == 0:
-            st.warning("少なくとも1つの教科に1以上のコマ数を入力してください。")
-        else:
-            # ロジック実行
-            results = combine_classes(input_data)
-            pair_counts = collections.Counter(results)
+        subjects = ["国語", "算数", "英語", "理科", "社会"]
+        input_data = {}
+        
+        # グリッドレイアウトで入力をコンパクトに（スマホだと縦に並びます）
+        for subject in subjects:
+            input_data[subject] = st.number_input(
+                f"{subject}", 
+                min_value=0, max_value=20, value=1, step=1
+            )
+        
+        st.write("---")
+        calc_btn = st.button("組み合わせを作成 ✨", type="primary")
+
+    # --- メインエリア ---
+    if sum(input_data.values()) == 0:
+        st.info("👈 サイドバー（左上の > ボタン）から教科のコマ数を入力してください。")
+        # デモ用のグラフを表示しておく（見た目の賑やかし）
+        st.subheader("📊 現在のバランス")
+        df_demo = pd.DataFrame({"コマ数": [0]*5}, index=subjects)
+        st.bar_chart(df_demo)
+        return
+
+    # グラフの表示（入力状況の可視化）
+    st.subheader("📊 入力バランス")
+    chart_data = pd.DataFrame.from_dict(input_data, orient='index', columns=['コマ数'])
+    st.bar_chart(chart_data)
+
+    if calc_btn:
+        # ロジック実行
+        results = combine_classes(input_data)
+        pair_counts = collections.Counter(results)
+        
+        st.divider()
+        st.subheader(f"✅ 作成結果 (全{len(results)}枠)")
+        
+        # スマホで見やすいようにカード形式でループ表示
+        for pair, count in pair_counts.items():
+            subject1, subject2 = pair
+            is_same = subject1 == subject2
             
-            # 結果表示エリア
-            st.subheader("📝 作成結果")
-            
-            # データの整形（見やすく表示するため）
-            display_data = []
-            same_subject_alert = False
-            
-            for pair, count in pair_counts.items():
-                subject1, subject2 = pair
-                is_same = subject1 == subject2
-                
-                if is_same:
-                    same_subject_alert = True
-                    pair_str = f"⚠️ {subject1} ＋ {subject2}"
-                else:
-                    pair_str = f"{subject1} ＋ {subject2}"
-                
-                display_data.append({
-                    "組み合わせ内容": pair_str,
-                    "コマ数 (90分枠)": count,
-                    "備考": "同じ教科のペア" if is_same else "OK"
-                })
-            
-            # DataFrameとしてテーブル表示
-            st.table(display_data)
-            
-            # メッセージ
-            if same_subject_alert:
-                st.info("※ ⚠️がついている箇所は、他の教科の残数が足りず、同じ教科同士のペアになっています。")
+            # アイコンとクラス分け
+            if is_same:
+                css_class = "lesson-card" # デフォルト（赤アクセント）
+                icon = "⚠️"
+                status_text = "同じ教科ペア"
             else:
-                st.success("すべてのコマが異なる教科とうまく組み合わされました！")
+                css_class = "lesson-card safe" # 安全（緑アクセント）
+                icon = "✨"
+                status_text = "Good!"
+
+            # HTMLを使ってカードを描画
+            st.markdown(f"""
+            <div class="{css_class}">
+                <div class="card-title">
+                    <span>{icon} {subject1} ＋ {subject2}</span>
+                    <span class="card-badge">{count}コマ</span>
+                </div>
+                <div style="font-size: 0.9em; color: #666;">
+                    {status_text}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        # 最終メッセージ
+        has_warning = any(p[0] == p[1] for p in pair_counts.keys())
+        if has_warning:
+            st.warning("一部、コマ数が偏っているため同じ教科のペアが発生しました。")
+        else:
+            st.success("全てのコマが良いバランスで組み合わされました！")
 
 if __name__ == "__main__":
     main()
