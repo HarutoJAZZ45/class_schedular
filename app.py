@@ -1,118 +1,70 @@
 import streamlit as st
 import collections
+import math
 
-# --- ページ設定 (最初に行う必要があります) ---
+# --- 1. ページ設定 (Wideモードで画面を広く使う) ---
 st.set_page_config(
-    page_title="Class Pair",
-    page_icon="🧩",
-    layout="centered",
+    page_title="Class Pair (PC)",
+    page_icon="⌨️",
+    layout="wide",  # 横幅いっぱいに使う
     initial_sidebar_state="collapsed"
 )
 
-# --- カスタムCSS (デザインの核心) ---
-# Streamlit標準の見た目を上書きして、モダンなWebアプリ風にします
+# --- 2. CSS注入 (余白を削り、一画面に収める) ---
 st.markdown("""
 <style>
-    /* 全体のフォントと背景 */
-    .stApp {
-        background-color: #FAFAFA; /* ほんのりグレーで目に優しく */
-        font-family: "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, sans-serif;
+    /* 全体の余白を極限まで削る */
+    .block-container {
+        padding-top: 2rem;
+        padding-bottom: 1rem;
+        padding-left: 3rem;
+        padding-right: 3rem;
     }
     
-    /* ヘッダーの余白調整 */
-    .block-container {
-        padding-top: 3rem;
-        padding-bottom: 5rem;
-        max_width: 600px; /* スマホで見やすい幅に制限 */
-    }
+    /* タイトル周りをコンパクトに */
+    h1 { font-size: 1.8rem !important; margin-bottom: 0 !important; }
+    p { margin-bottom: 0.5rem !important; }
 
-    /* タイトルデザイン */
-    h1 {
-        font-weight: 800 !important;
-        color: #333;
-        font-size: 2.2rem !important;
-        margin-bottom: 0.5rem !important;
-        text-align: center;
-    }
-    p {
-        color: #666;
-        text-align: center;
-        margin-bottom: 2rem;
-    }
-
-    /* 入力エリアのカード化 */
-    .input-card {
-        background: white;
+    /* 入力フォームの背景 */
+    [data-testid="stForm"] {
+        background-color: #f8f9fa;
         padding: 20px;
-        border-radius: 16px;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.03);
-        margin-bottom: 20px;
+        border-radius: 8px;
+        border: 1px solid #ddd;
     }
 
-    /* ボタンのカスタム */
-    .stButton > button {
-        width: 100%;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        border: none;
-        padding: 15px 0;
-        font-size: 1.1rem;
-        font-weight: bold;
-        border-radius: 12px;
-        transition: all 0.3s;
-        box-shadow: 0 4px 15px rgba(118, 75, 162, 0.3);
-    }
-    .stButton > button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(118, 75, 162, 0.4);
-        color: white;
-    }
-
-    /* 結果カードのデザイン */
-    .result-card {
-        background: white;
-        padding: 15px 20px;
-        border-radius: 12px;
-        margin-bottom: 12px;
+    /* 結果カードのデザイン（コンパクト版） */
+    .result-box {
+        background-color: white;
+        border: 1px solid #eee;
+        border-left: 4px solid #ddd;
+        padding: 8px 12px;
+        margin-bottom: 8px;
+        border-radius: 4px;
+        font-size: 0.95rem;
         display: flex;
         justify-content: space-between;
         align-items: center;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.02);
-        border-left: 6px solid #e2e8f0;
-        transition: transform 0.2s;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
     }
-    .result-card:hover {
-        transform: scale(1.02);
-    }
-    .result-card.good {
-        border-left-color: #48bb78; /* Green */
-    }
-    .result-card.bad {
-        border-left-color: #f56565; /* Red */
-    }
+    .result-box.ok { border-left-color: #00CC66; } /* 緑 */
+    .result-box.ng { border-left-color: #FF3333; background-color: #fff5f5; } /* 赤 */
     
-    .subject-name {
-        font-weight: bold;
-        color: #2d3748;
-        font-size: 1.05rem;
+    .subject-text { font-weight: bold; color: #333; }
+    .badge { 
+        background: #eee; color: #555; 
+        font-size: 0.8rem; padding: 2px 8px; border-radius: 10px; 
     }
-    .count-badge {
-        background: #edf2f7;
-        color: #4a5568;
-        padding: 4px 12px;
-        border-radius: 20px;
-        font-size: 0.85rem;
-        font-weight: 600;
+
+    /* キーボード操作フォーカス時の視認性向上 */
+    input:focus {
+        background-color: #e8f0fe !important;
+        border-color: #4285f4 !important;
     }
-    
-    /* Streamlitの不要な要素を隠す */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
 
-# --- ロジック (変更なし) ---
+# --- 3. ロジック ---
 def combine_classes(class_durations):
     pool = []
     for subject, count in class_durations.items():
@@ -137,68 +89,85 @@ def combine_classes(class_durations):
         pairs.append(pair)
     return pairs
 
-# --- メイン画面 ---
+# --- 4. メイン画面構成 ---
 def main():
-    # タイトル部分
-    st.markdown("<h1>Class Pair</h1>", unsafe_allow_html=True)
-    st.markdown("<p>90分授業を45分×2に最適化</p>", unsafe_allow_html=True)
+    st.title("⌨️ Class Pair Optimizer")
+    st.caption("Tabキーで移動、数値を入力し、最後にEnter(Ctrl+Enter)で実行")
 
-    # 入力セクション（カード風デザインの中に配置）
-    st.markdown('<div class="input-card">', unsafe_allow_html=True)
-    
-    subjects = ["国語", "算数", "英語", "理科", "社会"]
-    input_data = {}
-    
-    # スマホで見やすいように 2列カラム で入力を配置
-    cols = st.columns(2)
-    for i, subject in enumerate(subjects):
-        with cols[i % 2]:
-            input_data[subject] = st.number_input(
-                f"{subject}", 
-                min_value=0, max_value=10, value=1 if i < 3 else 0, 
-                key=subject
-            )
-    
-    st.markdown('</div>', unsafe_allow_html=True)
+    # 画面を左右に分割 (左:入力 1 : 右:結果 3 の比率)
+    col_input, col_result = st.columns([1, 3], gap="large")
 
-    # アクションボタン（CSSで大きくデザイン済み）
-    if st.button("組み合わせを生成"):
-        if sum(input_data.values()) == 0:
-            st.error("教科のコマ数を入力してください")
+    # --- 左カラム：入力フォーム ---
+    with col_input:
+        # st.formを使うことで、エンターキーでのリロードを防ぎ、最後に一括送信できる
+        with st.form(key="input_form"):
+            st.markdown("##### 📝 Input (90min)")
+            
+            subjects = ["国語", "算数", "英語", "理科", "社会"]
+            input_data = {}
+            
+            # 各入力欄
+            for subject in subjects:
+                input_data[subject] = st.number_input(
+                    f"{subject}", 
+                    min_value=0, max_value=20, value=1 if subject in ["国語", "算数"] else 0,
+                    step=1
+                )
+            
+            st.markdown("---")
+            # Submitボタン（これがフォームのトリガー）
+            submit_btn = st.form_submit_button("実行 (Enter)", type="primary")
+
+    # --- 右カラム：結果表示 ---
+    with col_result:
+        if submit_btn:
+            if sum(input_data.values()) == 0:
+                st.warning("コマ数を入力してください。")
+            else:
+                results = combine_classes(input_data)
+                pair_counts = collections.Counter(results)
+                
+                # ヘッダー情報
+                st.markdown(f"##### 📊 Result (Total: {len(results)} pairs)")
+                
+                # 結果を「横並び」に展開して縦スクロールを防ぐ
+                # 結果の個数に応じてカラム数を動的に決める（最大3列）
+                n_results = len(pair_counts)
+                n_cols = 3 if n_results > 6 else (2 if n_results > 3 else 1)
+                
+                # 結果表示用のカラムを作成
+                result_columns = st.columns(n_cols)
+                
+                # 辞書アイテムをリスト化してインデックスアクセスできるようにする
+                items = list(pair_counts.items())
+                
+                # 各カラムにデータを均等に分配して表示
+                chunk_size = math.ceil(len(items) / n_cols)
+                
+                for i in range(n_cols):
+                    with result_columns[i]:
+                        start = i * chunk_size
+                        end = start + chunk_size
+                        for pair, count in items[start:end]:
+                            subject1, subject2 = pair
+                            is_same = subject1 == subject2
+                            
+                            status_class = "ng" if is_same else "ok"
+                            
+                            # シンプルなHTML表示
+                            st.markdown(f"""
+                            <div class="result-box {status_class}">
+                                <span class="subject-text">{subject1} ＋ {subject2}</span>
+                                <span class="badge">×{count}</span>
+                            </div>
+                            """, unsafe_allow_html=True)
+                
+                # 警告メッセージがあれば下部に控えめに表示
+                if any(p[0] == p[1] for p in pair_counts.keys()):
+                    st.error("⚠️ 同じ教科の組み合わせが含まれています")
         else:
-            results = combine_classes(input_data)
-            pair_counts = collections.Counter(results)
-            
-            # 結果表示エリア
-            st.markdown("<br>", unsafe_allow_html=True)
-            
-            # 概要を表示
-            total_slots = len(results)
-            st.markdown(f"<p style='text-align:left; font-weight:bold; color:#a0aec0; margin-bottom:10px;'>TOTAL: {total_slots} 枠</p>", unsafe_allow_html=True)
-
-            for pair, count in pair_counts.items():
-                subject1, subject2 = pair
-                is_same = subject1 == subject2
-                
-                # クラス分け（CSS用）
-                card_class = "bad" if is_same else "good"
-                icon = "⚠️" if is_same else "✨"
-                
-                # HTMLカード描画
-                st.markdown(f"""
-                <div class="result-card {card_class}">
-                    <div class="subject-name">
-                        {subject1} <span style="color:#cbd5e0; margin:0 8px;">|</span> {subject2}
-                    </div>
-                    <div class="count-badge">
-                        × {count}
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-
-            # フィードバックメッセージ
-            if any(p[0] == p[1] for p in pair_counts.keys()):
-                st.markdown("<p style='font-size:0.8rem; color:#f56565; margin-top:20px;'>※ 一部、同じ教科のペアが含まれています</p>", unsafe_allow_html=True)
+            # 初期状態の案内
+            st.info("👈 左側のフォームに数値を入力し、実行してください。")
 
 if __name__ == "__main__":
     main()
